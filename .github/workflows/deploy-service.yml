@@ -29,10 +29,10 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Generate ephemeral SSH key for this run
+      - name: Generate ephemeral SSH key for this run (RSA 4096)
         id: key
         run: |
-          ssh-keygen -t ed25519 -f /tmp/gha_key -N "" -C "gha-deploy"
+          ssh-keygen -t rsa -b 4096 -f /tmp/gha_key -N "" -C "gha-deploy"
           echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
           echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
 
@@ -52,8 +52,8 @@ jobs:
       - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          cp /tmp/gha_key ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          cp /tmp/gha_key ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ steps.tfout.outputs.VM_IP }}" >> ~/.ssh/known_hosts || true
 
       - uses: actions/setup-python@v5

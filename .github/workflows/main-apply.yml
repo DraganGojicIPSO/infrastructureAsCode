@@ -41,7 +41,7 @@ jobs:
 
       - name: Generate ephemeral SSH key
         run: |
-          ssh-keygen -t ed25519 -f /tmp/gha_key -N "" -C "gha-staging"
+          ssh-keygen -t rsa -b 4096 -f /tmp/gha_key -N "" -C "gha-staging"
           echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
 
       - name: Terraform init & apply
@@ -56,8 +56,8 @@ jobs:
       - name: Prepare SSH for Ansible
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          cp /tmp/gha_key ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          cp /tmp/gha_key ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ steps.out.outputs.vm_ip }}" >> ~/.ssh/known_hosts
 
       - uses: actions/setup-python@v5
