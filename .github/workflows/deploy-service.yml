@@ -122,7 +122,7 @@ jobs:
         env:
           RG: ${{ vars.STACK_NAME || 'meteo-staging' }}-rg
           VM: ${{ vars.STACK_NAME || 'meteo-staging' }}-vm
-          IP: ${{ steps.out.outputs.vm_ip }}   # in deploy-service.yml: steps.tfout.outputs.VM_IP
+          IP: ${{ steps.out.outputs.vm_ip }}   # in mach endli deploy-service.yml: steps.tfout.outputs.VM_IP
         run: |
           # Warten bis Azure-VM 'running' meldet
           az vm wait -g "$RG" -n "$VM" --custom "instanceView.statuses[?code=='PowerState/running']"
