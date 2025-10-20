@@ -36,6 +36,10 @@ jobs:
           echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
           echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
 
+      - name: Terraform init
+              run: |
+                terraform -chdir=terraform init -input=false
+
       - name: Import existing RG if present (idempotent)
         env:
           STACK_NAME: ${{ vars.STACK_NAME || 'meteo-staging' }}
@@ -49,7 +53,6 @@ jobs:
 
       - name: Ensure infra (terraform apply - idempotent)
         run: |
-          terraform -chdir=terraform init
           terraform -chdir=terraform apply -auto-approve
 
       - name: Read VM IP

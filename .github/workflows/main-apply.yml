@@ -44,6 +44,10 @@ jobs:
           ssh-keygen -t rsa -b 4096 -f /tmp/gha_key -N "" -C "gha-staging"
           echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
     
+      - name: Terraform init
+        run: |
+          terraform -chdir=terraform init -input=false
+
       - name: Import existing RG if present (idempotent)
         env:
           STACK_NAME: ${{ vars.STACK_NAME || 'meteo-staging' }}
@@ -55,9 +59,8 @@ jobs:
             terraform -chdir=terraform import azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${NAME}" || true
           fi
 
-      - name: Terraform init & apply
+      - name: Terraform apply
         run: |
-          terraform -chdir=terraform init
           terraform -chdir=terraform apply -auto-approve
 
       - name: Read VM IP
