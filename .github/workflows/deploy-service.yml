@@ -161,9 +161,6 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
-          EXTRA=""
-          # read_cs optional anhängen
-          if [ -n "${{ vars.READ_CS }}" ]; then EXTRA+=' -e "read_cs=${{ vars.READ_CS }}"'; fi
           ansible-playbook -i /tmp/inventory.ini ansible/configure.yml \
             -e "github_owner=${{ steps.owner.outputs.lc }}" \
             -e "ghcr_user=${{ secrets.GHCR_USER }}" \
@@ -198,7 +195,7 @@ jobs:
             -e "h2c=${{ vars.DOTNET_HTTP2_UNENCRYPTED }}" \
             -e "log_default=${{ vars.LOG_DEFAULT }}" \
             -e "log_microsoft=${{ vars.LOG_MICROSOFT }}" \
-            $EXTRA
+            -e "read_cs=${{ vars.READ_CS }}" \
 
       - name: Deploy only ${{ env.SERVICE }}
         env:
