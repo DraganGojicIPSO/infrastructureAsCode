@@ -1,4 +1,4 @@
-name: IaC – Apply on main (env: staging, no SSH secrets)
+name: "IaC - Apply on main (env: staging, no SSH secrets)"
 
 on:
   push:

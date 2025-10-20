@@ -1,4 +1,4 @@
-name: IaC – Deploy single service (env: staging, no SSH secrets)
+name: "IaC - Deploy single service (env: staging, no SSH secrets)"
 
 on:
   repository_dispatch:
