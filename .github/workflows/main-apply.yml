@@ -155,7 +155,7 @@ jobs:
         with: { python-version: '3.11' }
       - run: |
           pip install ansible
-          ansible-galaxy collection install community.docker -q
+          ansible-galaxy collection install community.docker
 
       - name: Configure VM (render .env + compose up)
         env:
