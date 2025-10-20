@@ -1,0 +1,82 @@
+name: IaC – Deploy single service (env: staging, no SSH secrets)
+
+on:
+  repository_dispatch:
+    types: [ meteo-deploy-service ]
+
+concurrency:
+  group: iac-staging-dispatch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions: { id-token: write, contents: read }
+    env:
+      SERVICE: ${{ github.event.client_payload.service }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'meteo-staging' }}
+      VM_USER: ${{ vars.VM_USER || 'azureuser' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Generate ephemeral SSH key for this run
+        id: key
+        run: |
+          ssh-keygen -t ed25519 -f /tmp/gha_key -N "" -C "gha-deploy"
+          echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
+          echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
+
+      - name: Ensure infra (terraform apply – idempotent)
+        run: |
+          terraform -chdir=terraform init
+          terraform -chdir=terraform apply -auto-approve
+
+      - name: Read VM IP
+        id: tfout
+        run: echo "VM_IP=$(terraform -chdir=terraform output -raw vm_public_ip)" >> $GITHUB_OUTPUT
+
+      - name: Inject ephemeral public key via Azure RunCommand
+        run: |
+          az vm run-command invoke --resource-group "${{ env.STACK_NAME }}-rg" --name "${{ env.STACK_NAME }}-vm" --command-id RunShellScript  --scripts "sudo -u ${{ env.VM_USER }} bash -lc 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo "${{ steps.key.outputs.PUB }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'"
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cp /tmp/gha_key ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ steps.tfout.outputs.VM_IP }}" >> ~/.ssh/known_hosts || true
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: |
+          pip install ansible
+          ansible-galaxy collection install community.docker -q
+
+      - name: Ensure stack present (render .env idempotent)
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_PAT:  ${{ secrets.GHCR_PAT }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "[staging]" > /tmp/inventory.ini
+          echo "${{ steps.tfout.outputs.VM_IP }} ansible_user=${{ env.VM_USER }}" >> /tmp/inventory.ini
+          ansible-playbook -i /tmp/inventory.ini ansible/configure.yml -e "db_user=${{ vars.DB_USER }}" -e "db_password=${{ secrets.DB_PASSWORD }}" -e "read_cs=${{ vars.READ_CS }}" -e "central_id=${{ vars.CENTRAL_ID }}" -e "central_ids=${{ vars.CENTRAL_IDS }}" -e "nodes=${{ vars.NODES }}" -e "loglevel_default=${{ vars.LOGLEVEL_DEFAULT }}" -e "loglevel_ms=${{ vars.LOGLEVEL_MS }}" -e "allowed_hosts=${{ vars.ALLOWEDHOSTS }}" -e "storage_db_name=${{ vars.STORAGE_DB_NAME }}" -e "storage_db_user=${{ vars.STORAGE_DB_USER }}" -e "storage_db_password=${{ secrets.STORAGE_DB_PASSWORD }}" -e "storage_cs=${{ vars.STORAGE_CS }}" -e "timescaledb_telemetry=${{ vars.TIMESCALEDB_TELEMETRY }}" -e "validation_url=${{ vars.VALIDATION_URL }}" -e "storage_url=${{ vars.STORAGE_URL }}" -e "station_id=${{ vars.STATION_ID }}" -e "ingest_url=${{ vars.INGEST_URL }}" -e "outbox_cs=${{ vars.OUTBOX_CS }}" -e "rain_on_score=${{ vars.RAIN_ON_SCORE }}" -e "rain_off_score=${{ vars.RAIN_OFF_SCORE }}" -e "pressure_threshold_hpa=${{ vars.PRESSURE_THRESHOLD_HPA }}" -e "sensor_pressure_ms=${{ vars.SENSOR_PRESSURE_MS }}" -e "sensor_lidar_ms=${{ vars.SENSOR_LIDAR_MS }}" -e "sensor_lidar_seed=${{ vars.SENSOR_LIDAR_SEED }}" -e "sensor_humidity_ms=${{ vars.SENSOR_HUMIDITY_MS }}" -e "outbox_batch_max=${{ vars.OUTBOX_BATCH_MAX }}" -e "outbox_invisibility_sec=${{ vars.OUTBOX_INVISIBILITY_SEC }}" -e "h2c=${{ vars.DOTNET_HTTP2_UNENCRYPTED }}" -e "log_default=${{ vars.LOG_DEFAULT }}" -e "log_microsoft=${{ vars.LOG_MICROSOFT }}" -e "ghcr_user=${{ secrets.GHCR_USER }}" -e "ghcr_pat=${{ secrets.GHCR_PAT }}"
+
+      - name: Deploy only ${{ env.SERVICE }}
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          echo "[staging]" > /tmp/inventory.ini
+          echo "${{ steps.tfout.outputs.VM_IP }} ansible_user=${{ env.VM_USER }}" >> /tmp/inventory.ini
+          ansible-playbook -i /tmp/inventory.ini ansible/deploy_service.yml -e "service=${SERVICE}"

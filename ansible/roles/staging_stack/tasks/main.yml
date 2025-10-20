@@ -1,0 +1,41 @@
+---
+- name: Ensure /opt/meteo exists
+  file:
+    path: /opt/meteo
+    state: directory
+    mode: '0755'
+
+- name: Render .env.staging
+  template:
+    src: ".env.staging.j2"
+    dest: "/opt/meteo/.env.staging"
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: Render docker-compose.staging.yml
+  template:
+    src: "docker-compose.staging.yml.j2"
+    dest: "/opt/meteo/docker-compose.staging.yml"
+    mode: '0644'
+
+- name: Login to GHCR (private images)
+  community.docker.docker_login:
+    registry_url: https://ghcr.io
+    username: "{{ ghcr_user }}"
+    password: "{{ ghcr_pat }}"
+  when:
+    - ghcr_user is defined
+    - ghcr_pat  is defined
+    - ghcr_user | length > 0
+    - ghcr_pat  | length > 0
+
+- name: Pull images & start stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/meteo
+    files:
+      - docker-compose.staging.yml
+    env_files:
+      - /opt/meteo/.env.staging
+    state: present
+    pull: always

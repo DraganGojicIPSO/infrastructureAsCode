@@ -1,0 +1,77 @@
+version: "3.9"
+services:
+  read-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: "read"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - read_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d read"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  storage-db:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: "${STORAGE_DB_NAME}"
+      POSTGRES_USER: "${STORAGE_DB_USER}"
+      POSTGRES_PASSWORD: "${STORAGE_DB_PASSWORD}"
+      TIMESCALEDB_TELEMETRY: "${TIMESCALEDB_TELEMETRY}"
+    volumes:
+      - storage_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STORAGE_DB_USER} -d ${STORAGE_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ingest:
+    image: ghcr.io/{{ github_owner }}/meteo-ingest:staging
+    env_file: [ ".env.staging" ]
+    depends_on: [ validation, storage ]
+    expose: [ "50051" ]
+    restart: unless-stopped
+
+  validation:
+    image: ghcr.io/{{ github_owner }}/meteo-validation:staging
+    env_file: [ ".env.staging" ]
+    expose: [ "50052" ]
+    restart: unless-stopped
+
+  storage:
+    image: ghcr.io/{{ github_owner }}/meteo-storage:staging
+    env_file: [ ".env.staging" ]
+    depends_on: [ storage-db ]
+    expose: [ "50053" ]
+    restart: unless-stopped
+
+  projection:
+    image: ghcr.io/{{ github_owner }}/meteo-projection:staging
+    env_file: [ ".env.staging" ]
+    depends_on: [ read-db, storage ]
+    expose: [ "50054" ]
+    restart: unless-stopped
+
+  query:
+    image: ghcr.io/{{ github_owner }}/meteo-query:staging
+    env_file: [ ".env.staging" ]
+    depends_on: [ read-db, projection ]
+    ports: [ "80:8080" ]
+    restart: unless-stopped
+
+  station:
+    image: ghcr.io/{{ github_owner }}/meteo-station:staging
+    env_file: [ ".env.staging" ]
+    depends_on: [ ingest ]
+    volumes:
+      - station_data:/data
+    restart: unless-stopped
+
+volumes:
+  read_db_data: {}
+  storage_db_data: {}
+  station_data: {}

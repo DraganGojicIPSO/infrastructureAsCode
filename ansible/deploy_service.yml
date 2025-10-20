@@ -1,0 +1,26 @@
+---
+- hosts: all
+  become: true
+  vars:
+    service: "{{ service | default('query') }}"
+  tasks:
+    - name: Pull only selected service image
+      community.docker.docker_compose_v2:
+        project_src: /opt/meteo
+        files:
+          - docker-compose.staging.yml
+        env_files:
+          - /opt/meteo/.env.staging
+        pull: true
+        services: [ "{{ service }}" ]
+        state: present
+
+    - name: Restart only selected service
+      community.docker.docker_compose_v2:
+        project_src: /opt/meteo
+        files:
+          - docker-compose.staging.yml
+        env_files:
+          - /opt/meteo/.env.staging
+        services: [ "{{ service }}" ]
+        state: restarted
