@@ -51,6 +51,61 @@ jobs:
             terraform -chdir=terraform import azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${NAME}" || true
           fi
 
+      - name: Import existing Azure resources if present (idempotent)
+        env:
+          AZ_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          STACK:  ${{ vars.STACK_NAME || 'meteo-staging' }}
+        run: |
+          set -e
+          RG="${STACK}-rg"
+          VNET="${STACK}-vnet"
+          SUBNET="${STACK}-subnet"
+          PIP="${STACK}-pip"
+          NSG="${STACK}-nsg"
+          NIC="${STACK}-nic"
+          VM="${STACK}-vm"
+
+          imp () {
+            addr="$1"; id="$2"
+            terraform -chdir=terraform state show "$addr" >/dev/null 2>&1 || \
+            terraform -chdir=terraform import "$addr" "$id" || true
+          }
+
+          # RG
+          az group show -n "$RG" >/dev/null 2>&1 && \
+            imp azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}"
+
+          # VNet
+          az network vnet show -g "$RG" -n "$VNET" >/dev/null 2>&1 && \
+            imp azurerm_virtual_network.vnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}"
+
+          # Subnet
+          az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n "$SUBNET" >/dev/null 2>&1 && \
+            imp azurerm_subnet.subnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}"
+
+          # Public IP
+          az network public-ip show -g "$RG" -n "$PIP" >/dev/null 2>&1 && \
+            imp azurerm_public_ip.pip "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}"
+
+          # NSG
+          az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1 && \
+            imp azurerm_network_security_group.nsg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}"
+
+          # NIC
+          az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && \
+            imp azurerm_network_interface.nic "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+
+          # NIC <-> NSG Association (Terraform-spezifisches Import-ID-Format: {NIC_ID}|{NSG_ID})
+          if az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1; then
+            NIC_ID="/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+            NSG_ID="/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}"
+            imp azurerm_network_interface_security_group_association.assoc "${NIC_ID}|${NSG_ID}"
+          fi
+
+          # VM
+          az vm show -g "$RG" -n "$VM" >/dev/null 2>&1 && \
+            imp azurerm_linux_virtual_machine.vm "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}"
+
       - name: Ensure infra (terraform apply - idempotent)
         run: |
           terraform -chdir=terraform apply -auto-approve
