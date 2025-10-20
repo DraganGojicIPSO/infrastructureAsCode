@@ -36,7 +36,18 @@ jobs:
           echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
           echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
 
-      - name: Ensure infra (terraform apply – idempotent)
+      - name: Import existing RG if present (idempotent)
+        env:
+          STACK_NAME: ${{ vars.STACK_NAME || 'meteo-staging' }}
+          AZ_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          NAME="${STACK_NAME}-rg"
+          if az group show -n "$NAME" >/dev/null 2>&1; then
+            terraform -chdir=terraform state show azurerm_resource_group.rg >/dev/null 2>&1 || \
+            terraform -chdir=terraform import azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${NAME}" || true
+          fi
+
+      - name: Ensure infra (terraform apply - idempotent)
         run: |
           terraform -chdir=terraform init
           terraform -chdir=terraform apply -auto-approve
