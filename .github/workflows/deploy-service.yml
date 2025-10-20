@@ -182,7 +182,6 @@ jobs:
             -e "storage_url=${{ vars.STORAGE_URL }}" \
             -e "station_id=${{ vars.STATION_ID }}" \
             -e "ingest_url=${{ vars.INGEST_URL }}" \
-            -e "outbox_cs=${{ vars.OUTBOX_CS }}" \
             -e "rain_on_score=${{ vars.RAIN_ON_SCORE }}" \
             -e "rain_off_score=${{ vars.RAIN_OFF_SCORE }}" \
             -e "pressure_threshold_hpa=${{ vars.PRESSURE_THRESHOLD_HPA }}" \
