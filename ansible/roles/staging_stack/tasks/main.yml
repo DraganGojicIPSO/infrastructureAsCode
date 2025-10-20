@@ -118,8 +118,8 @@
     files:
       - docker-compose.staging.yml
     state: present
-    pull: always
-    recreate: smart
+    pull: always          # ok (alternativ: missing/never)
+    recreate: auto        # gültige Werte: always | never | auto
     remove_orphans: true
 
 # optional: prüfen, dass compose verfügbar ist
