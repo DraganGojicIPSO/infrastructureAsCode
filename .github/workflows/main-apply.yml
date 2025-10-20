@@ -67,12 +67,34 @@ jobs:
         id: out
         run: echo "vm_ip=$(terraform -chdir=terraform output -raw vm_public_ip)" >> $GITHUB_OUTPUT
 
+      - name: Wait for VM and SSH to be ready
+        env:
+          RG: ${{ vars.STACK_NAME || 'meteo-staging' }}-rg
+          VM: ${{ vars.STACK_NAME || 'meteo-staging' }}-vm
+          IP: ${{ steps.out.outputs.vm_ip }}   # in deploy-service.yml: steps.tfout.outputs.VM_IP
+        run: |
+          # Warten bis Azure-VM 'running' meldet
+          az vm wait -g "$RG" -n "$VM" --custom "instanceView.statuses[?code=='PowerState/running']"
+          # Warten bis Port 22 erreichbar ist (max ~5 Min)
+          for i in {1..60}; do
+            if timeout 5 bash -c "</dev/tcp/$IP/22" 2>/dev/null; then
+              echo "SSH reachable on $IP:22"; break
+            fi
+            echo "Waiting for SSH on $IP (try $i/60)"; sleep 5
+          done
+
       - name: Prepare SSH for Ansible
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           cp /tmp/gha_key ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "${{ steps.out.outputs.vm_ip }}" >> ~/.ssh/known_hosts
+          # keyscan mit Timeout; darf nicht failen
+          ssh-keyscan -T 5 -H "${{ steps.out.outputs.vm_ip }}" >> ~/.ssh/known_hosts || true
+
+      - name: Create Ansible inventory (no host key checking)
+        run: |
+          echo "[staging]" > /tmp/inventory.ini
+          echo "${{ steps.out.outputs.vm_ip }} ansible_user=${{ env.VM_USER }} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> /tmp/inventory.ini
 
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
