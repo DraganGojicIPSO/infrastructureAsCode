@@ -30,41 +30,41 @@ services:
       retries: 5
 
   ingest:
-    image: ghcr.io/{{ github_owner }}/meteo-ingest:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-ingest:staging
     env_file: [ ".env.staging" ]
     depends_on: [ validation, storage ]
     expose: [ "50051" ]
     restart: unless-stopped
 
   validation:
-    image: ghcr.io/{{ github_owner }}/meteo-validation:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-validation:staging
     env_file: [ ".env.staging" ]
     expose: [ "50052" ]
     restart: unless-stopped
 
   storage:
-    image: ghcr.io/{{ github_owner }}/meteo-storage:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-storage:staging
     env_file: [ ".env.staging" ]
     depends_on: [ storage-db ]
     expose: [ "50053" ]
     restart: unless-stopped
 
   projection:
-    image: ghcr.io/{{ github_owner }}/meteo-projection:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-projection:staging
     env_file: [ ".env.staging" ]
     depends_on: [ read-db, storage ]
     expose: [ "50054" ]
     restart: unless-stopped
 
   query:
-    image: ghcr.io/{{ github_owner }}/meteo-query:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-query:staging
     env_file: [ ".env.staging" ]
     depends_on: [ read-db, projection ]
     ports: [ "80:8080" ]
     restart: unless-stopped
 
   station:
-    image: ghcr.io/{{ github_owner }}/meteo-station:staging
+    image: ghcr.io/{{ github_owner | lower }}/meteo-station:staging
     env_file: [ ".env.staging" ]
     depends_on: [ ingest ]
     volumes:
