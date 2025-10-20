@@ -37,8 +37,8 @@ jobs:
           echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
 
       - name: Terraform init
-              run: |
-                terraform -chdir=terraform init -input=false
+        run: |
+          terraform -chdir=terraform init -input=false
 
       - name: Import existing RG if present (idempotent)
         env:
