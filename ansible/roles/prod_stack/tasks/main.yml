@@ -149,7 +149,7 @@
     dest: /opt/meteo/caddy/Caddyfile
     mode: '0644'
   vars:
-    domain: "{{ dns_label | default(stack_name) }}.westeurope.cloudapp.azure.com"
+    domain: "{{ dns_label }}.westeurope.cloudapp.azure.com"
 
 # optional: prüfen, dass compose verfügbar ist
 - name: Check docker compose version
