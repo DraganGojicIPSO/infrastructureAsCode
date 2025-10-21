@@ -38,12 +38,15 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.42.1.0/24"]
 }
 
+variable "dns_label" { type = string, default = "meteo-staging" }
+
 resource "azurerm_public_ip" "pip" {
   name                = "${local.name}-pip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  domain_name_label   = var.dns_label
   tags                = local.tags
 }
 
