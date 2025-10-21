@@ -122,18 +122,24 @@
     recreate: auto        # gültige Werte: always | never | auto
     remove_orphans: true
 
-- name: Ensure Caddy dir exists
+- name: Check if Caddyfile path is a directory (should be a file)
+  become: true
+  stat:
+    path: /opt/meteo/caddy/Caddyfile
+  register: caddyfile_stat
+
+- name: Remove wrong Caddyfile directory if present
   become: true
   file:
-    path: /opt/meteo/caddy
-    state: directory
-    mode: '0755'
+    path: /opt/meteo/caddy/Caddyfile
+    state: absent
+  when: caddyfile_stat.stat.isdir | default(false)
 
 - name: Render Caddyfile
   become: true
   template:
-    src: "Caddyfile.j2"
-    dest: "/opt/meteo/caddy/Caddyfile"
+    src: Caddyfile.j2
+    dest: /opt/meteo/caddy/Caddyfile
     mode: '0644'
   vars:
     domain: "{{ dns_label | default(stack_name) }}.westeurope.cloudapp.azure.com"
