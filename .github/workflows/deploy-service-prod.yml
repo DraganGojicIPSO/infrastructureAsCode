@@ -41,7 +41,7 @@ jobs:
 
       - name: Terraform init
         run: terraform -chdir=terraform init -input=false
-
+      
       - name: Import existing RG if present (idempotent)
         env:
           STACK_NAME: ${{ vars.STACK_NAME || 'meteo-prod' }}
@@ -54,11 +54,16 @@ jobs:
           fi
 
       - name: Import existing Azure resources if present (idempotent)
+        continue-on-error: true
         env:
           AZ_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           STACK:  ${{ vars.STACK_NAME || 'meteo-prod' }}
+        shell: bash
         run: |
-          set -e
+          set -Eeuo pipefail
+
+          az account set --subscription "${AZ_SUB}"
+
           RG="${STACK}-rg"
           VNET="${STACK}-vnet"
           SUBNET="${STACK}-subnet"
@@ -67,29 +72,35 @@ jobs:
           NIC="${STACK}-nic"
           VM="${STACK}-vm"
 
-          imp () {
-            addr="$1"; id="$2"
-            terraform -chdir=terraform state show "$addr" >/dev/null 2>&1 || \
-            terraform -chdir=terraform import "$addr" "$id" || true
-          }
+          tf()  { terraform -chdir=terraform "$@"; }
+          imp() { local addr="$1" id="$2"; tf state show "$addr" >/dev/null 2>&1 || tf import "$addr" "$id" || true; }
 
-          az group show -n "$RG" >/dev/null 2>&1 && \
-            imp azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}"
+          # Wenn die Resource Group gar nicht existiert, Import komplett überspringen
+          if ! az group exists -n "$RG" | grep -qi true; then
+            echo "RG $RG nicht vorhanden – Import wird übersprungen."
+            exit 0
+          fi
 
-          az network vnet show -g "$RG" -n "$VNET" >/dev/null 2>&1 && \
+          # Ab hier nur importieren, was wirklich existiert
+          if az network vnet show -g "$RG" -n "$VNET" >/dev/null 2>&1; then
             imp azurerm_virtual_network.vnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}"
+          fi
 
-          az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n "$SUBNET" >/dev/null 2>&1 && \
+          if az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n "$SUBNET" >/dev/null 2>&1; then
             imp azurerm_subnet.subnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}"
+          fi
 
-          az network public-ip show -g "$RG" -n "$PIP" >/dev/null 2>&1 && \
+          if az network public-ip show -g "$RG" -n "$PIP" >/dev/null 2>&1; then
             imp azurerm_public_ip.pip "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}"
+          fi
 
-          az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1 && \
+          if az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1; then
             imp azurerm_network_security_group.nsg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}"
+          fi
 
-          az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && \
+          if az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1; then
             imp azurerm_network_interface.nic "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+          fi
 
           if az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1; then
             NIC_ID="/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
@@ -97,9 +108,9 @@ jobs:
             imp azurerm_network_interface_security_group_association.assoc "${NIC_ID}|${NSG_ID}"
           fi
 
-          az vm show -g "$RG" -n "$VM" >/dev/null 2>&1 && \
+          if az vm show -g "$RG" -n "$VM" >/dev/null 2>&1; then
             imp azurerm_linux_virtual_machine.vm "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}"
-
+          fi
       - name: Ensure infra (terraform apply - idempotent)
         run: terraform -chdir=terraform apply -auto-approve
 
