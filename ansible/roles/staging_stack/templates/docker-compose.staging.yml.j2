@@ -77,7 +77,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /opt/meteo/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/meteo/caddy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped
