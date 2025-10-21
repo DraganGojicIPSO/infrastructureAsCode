@@ -32,6 +32,8 @@ services:
   ingest:
     image: ghcr.io/{{ github_owner | lower }}/meteo-ingest:staging
     env_file: [ ".env.staging" ]
+    environment:
+      ASPNETCORE_URLS: "http://0.0.0.0:50051"
     depends_on: [ validation, storage ]
     expose: [ "50051" ]
     restart: unless-stopped
@@ -39,12 +41,16 @@ services:
   validation:
     image: ghcr.io/{{ github_owner | lower }}/meteo-validation:staging
     env_file: [ ".env.staging" ]
+    environment:
+      ASPNETCORE_URLS: "http://0.0.0.0:50052"
     expose: [ "50052" ]
     restart: unless-stopped
 
   storage:
     image: ghcr.io/{{ github_owner | lower }}/meteo-storage:staging
     env_file: [ ".env.staging" ]
+    environment:
+      ASPNETCORE_URLS: "http://0.0.0.0:50053"
     depends_on: [ storage-db ]
     expose: [ "50053" ]
     restart: unless-stopped
@@ -52,6 +58,8 @@ services:
   projection:
     image: ghcr.io/{{ github_owner | lower }}/meteo-projection:staging
     env_file: [ ".env.staging" ]
+    environment:
+      ASPNETCORE_URLS: "http://0.0.0.0:50054"
     depends_on: [ read-db, storage ]
     expose: [ "50054" ]
     restart: unless-stopped
