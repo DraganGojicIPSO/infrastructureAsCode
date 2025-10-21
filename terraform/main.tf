@@ -39,7 +39,8 @@ resource "azurerm_subnet" "subnet" {
 }
 
 variable "dns_label" { 
-  type = string, default = "meteo-staging"
+  type = string
+  default = "meteo-staging"
 }
 
 resource "azurerm_public_ip" "pip" {
