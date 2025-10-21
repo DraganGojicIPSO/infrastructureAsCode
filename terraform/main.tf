@@ -38,7 +38,9 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.42.1.0/24"]
 }
 
-variable "dns_label" { type = string, default = "meteo-staging" }
+variable "dns_label" { 
+  type = string, default = "meteo-staging"
+}
 
 resource "azurerm_public_ip" "pip" {
   name                = "${local.name}-pip"
