@@ -112,7 +112,7 @@ jobs:
 
       - name: Terraform apply
         run: |
-          terraform -chdir=terraform apply -auto-approve
+          terraform -chdir=terraform apply -auto-approve -var-file="env/prod.tfvars"
 
       - name: Read VM IP
         id: out

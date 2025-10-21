@@ -112,7 +112,7 @@ jobs:
             imp azurerm_linux_virtual_machine.vm "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}"
           fi
       - name: Ensure infra (terraform apply - idempotent)
-        run: terraform -chdir=terraform apply -auto-approve
+        run: terraform -chdir=terraform apply -auto-approve -var-file="env/prod.tfvars"
 
       - name: Read VM IP
         id: tfout

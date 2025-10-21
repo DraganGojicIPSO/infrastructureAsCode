@@ -4,6 +4,13 @@ variable "name" {
   default     = "meteo-staging"
 }
 
+variable "env" {
+  type        = string
+  description = "Basisenv für Ressourcen"
+  default     = "staging"
+}
+
+
 variable "location" {
   type        = string
   description = "Azure Region"
