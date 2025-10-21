@@ -1,0 +1,7 @@
+{{ domain }}
+{
+    encode gzip zstd
+    reverse_proxy http://query:8080
+
+    tls dragan.gojic@student.ipso.ch
+}

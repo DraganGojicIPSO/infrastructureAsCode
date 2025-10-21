@@ -207,6 +207,7 @@ jobs:
             -e "log_default=${{ vars.LOG_DEFAULT }}" \
             -e "log_microsoft=${{ vars.LOG_MICROSOFT }}" \
             -e "read_cs=${{ vars.READ_CS }}" \
+            -e "dns_label=meteo-staging" \
 
       - name: Deploy only ${{ env.SERVICE }}
         env:

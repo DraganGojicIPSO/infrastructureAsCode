@@ -122,6 +122,22 @@
     recreate: auto        # gültige Werte: always | never | auto
     remove_orphans: true
 
+- name: Ensure Caddy dir exists
+  become: true
+  file:
+    path: /opt/meteo/caddy
+    state: directory
+    mode: '0755'
+
+- name: Render Caddyfile
+  become: true
+  template:
+    src: "Caddyfile.j2"
+    dest: "/opt/meteo/caddy/Caddyfile"
+    mode: '0644'
+  vars:
+    domain: "{{ dns_label | default(stack_name) }}.westeurope.cloudapp.azure.com"
+
 # optional: prüfen, dass compose verfügbar ist
 - name: Check docker compose version
   become: true

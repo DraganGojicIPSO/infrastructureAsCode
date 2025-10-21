@@ -70,6 +70,18 @@ services:
     depends_on: [ read-db, projection ]
     ports: [ "80:8080" ]
     restart: unless-stopped
+  
+  edge:
+    image: caddy:2
+    depends_on: [ query ]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # Cert-Storage
+      - caddy_config:/config
+    restart: unless-stopped
 
   station:
     image: ghcr.io/{{ github_owner | lower }}/meteo-station:{{ image_tag | default('prod') }}
@@ -83,3 +95,5 @@ volumes:
   read_db_data: {}
   storage_db_data: {}
   station_data: {}
+  caddy_data: {}
+  caddy_config: {}
