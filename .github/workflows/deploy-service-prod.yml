@@ -1,0 +1,207 @@
+name: "IaC - Deploy single service (env: production, no SSH secrets)"
+
+on:
+  repository_dispatch:
+    types: [meteo-deploy-service-prod]
+
+concurrency:
+  group: iac-prod-dispatch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      SERVICE: ${{ github.event.client_payload.service }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'meteo-prod' }}
+      VM_USER: ${{ vars.VM_USER || 'azureuser' }}
+      IMAGE_TAG: ${{ github.event.client_payload.tag || 'prod' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Generate ephemeral SSH key for this run (RSA 4096)
+        id: key
+        run: |
+          ssh-keygen -t rsa -b 4096 -f /tmp/gha_key -N "" -C "gha-deploy-prod"
+          echo "TF_VAR_ssh_public_key_data=$(cat /tmp/gha_key.pub)" >> $GITHUB_ENV
+          echo "PUB=$(cat /tmp/gha_key.pub)" >> $GITHUB_OUTPUT
+
+      - name: Terraform init
+        run: terraform -chdir=terraform init -input=false
+
+      - name: Import existing RG if present (idempotent)
+        env:
+          STACK_NAME: ${{ vars.STACK_NAME || 'meteo-prod' }}
+          AZ_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          NAME="${STACK_NAME}-rg"
+          if az group show -n "$NAME" >/dev/null 2>&1; then
+            terraform -chdir=terraform state show azurerm_resource_group.rg >/dev/null 2>&1 || \
+            terraform -chdir=terraform import azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${NAME}" || true
+          fi
+
+      - name: Import existing Azure resources if present (idempotent)
+        env:
+          AZ_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          STACK:  ${{ vars.STACK_NAME || 'meteo-prod' }}
+        run: |
+          set -e
+          RG="${STACK}-rg"
+          VNET="${STACK}-vnet"
+          SUBNET="${STACK}-subnet"
+          PIP="${STACK}-pip"
+          NSG="${STACK}-nsg"
+          NIC="${STACK}-nic"
+          VM="${STACK}-vm"
+
+          imp () {
+            addr="$1"; id="$2"
+            terraform -chdir=terraform state show "$addr" >/dev/null 2>&1 || \
+            terraform -chdir=terraform import "$addr" "$id" || true
+          }
+
+          az group show -n "$RG" >/dev/null 2>&1 && \
+            imp azurerm_resource_group.rg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}"
+
+          az network vnet show -g "$RG" -n "$VNET" >/dev/null 2>&1 && \
+            imp azurerm_virtual_network.vnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}"
+
+          az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n "$SUBNET" >/dev/null 2>&1 && \
+            imp azurerm_subnet.subnet "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}"
+
+          az network public-ip show -g "$RG" -n "$PIP" >/dev/null 2>&1 && \
+            imp azurerm_public_ip.pip "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}"
+
+          az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1 && \
+            imp azurerm_network_security_group.nsg "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}"
+
+          az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && \
+            imp azurerm_network_interface.nic "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+
+          if az network nic show -g "$RG" -n "$NIC" >/dev/null 2>&1 && az network nsg show -g "$RG" -n "$NSG" >/dev/null 2>&1; then
+            NIC_ID="/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+            NSG_ID="/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}"
+            imp azurerm_network_interface_security_group_association.assoc "${NIC_ID}|${NSG_ID}"
+          fi
+
+          az vm show -g "$RG" -n "$VM" >/dev/null 2>&1 && \
+            imp azurerm_linux_virtual_machine.vm "/subscriptions/${AZ_SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}"
+
+      - name: Ensure infra (terraform apply - idempotent)
+        run: terraform -chdir=terraform apply -auto-approve
+
+      - name: Read VM IP
+        id: tfout
+        run: echo "VM_IP=$(terraform -chdir=terraform output -raw vm_public_ip)" >> $GITHUB_OUTPUT
+
+      # Sicher & einfach: Key via az vm user update eintragen
+      - name: Inject ephemeral public key
+        run: |
+          az vm user update \
+            --resource-group "${{ env.STACK_NAME }}-rg" \
+            --name "${{ env.STACK_NAME }}-vm" \
+            --username "${{ env.VM_USER }}" \
+            --ssh-key-value "${{ steps.key.outputs.PUB }}"
+
+      - name: Wait for VM and SSH to be ready
+        env:
+          RG: ${{ vars.STACK_NAME || 'meteo-prod' }}-rg
+          VM: ${{ vars.STACK_NAME || 'meteo-prod' }}-vm
+          IP: ${{ steps.tfout.outputs.VM_IP }}
+        run: |
+          az vm wait -g "$RG" -n "$VM" --custom "instanceView.statuses[?code=='PowerState/running']"
+          for i in {1..60}; do
+            if timeout 5 bash -c "</dev/tcp/$IP/22" 2>/dev/null; then
+              echo "SSH reachable on $IP:22"; break
+            fi
+            echo "Waiting for SSH on $IP (try $i/60)"; sleep 5
+          done
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cp /tmp/gha_key ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -T 5 -H "${{ steps.tfout.outputs.VM_IP }}" >> ~/.ssh/known_hosts || true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+          ansible-galaxy collection install community.docker
+
+      # Owner lowercase für GHCR
+      - name: Compute lowercase owner
+        id: owner
+        shell: bash
+        run: |
+          owner="${{ github.repository_owner }}"
+          echo "lc=${owner,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Ansible inventory (no host key checking)
+        run: |
+          echo "[production]" > /tmp/inventory.ini
+          echo "${{ steps.tfout.outputs.VM_IP }} ansible_user=${{ env.VM_USER }} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> /tmp/inventory.ini
+
+      - name: Ensure stack present (render .env + compose up)
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i /tmp/inventory.ini ansible/configure_prod.yml \
+            -e "github_owner=${{ steps.owner.outputs.lc }}" \
+            -e "image_tag=${IMAGE_TAG}" \
+            -e "ghcr_user=${{ secrets.GHCR_USER }}" \
+            -e "ghcr_pat=${{ secrets.GHCR_PAT }}" \
+            -e "db_user=${{ vars.DB_USER }}" \
+            -e "db_password=${{ secrets.DB_PASSWORD }}" \
+            -e "central_id=${{ vars.CENTRAL_ID }}" \
+            -e "central_ids=${{ vars.CENTRAL_IDS }}" \
+            -e "nodes=${{ vars.NODES }}" \
+            -e "loglevel_default=${{ vars.LOGLEVEL_DEFAULT }}" \
+            -e "loglevel_ms=${{ vars.LOGLEVEL_MS }}" \
+            -e "allowed_hosts=${{ vars.ALLOWEDHOSTS }}" \
+            -e "storage_db_name=${{ vars.STORAGE_DB_NAME }}" \
+            -e "storage_db_user=${{ vars.STORAGE_DB_USER }}" \
+            -e "storage_db_password=${{ secrets.STORAGE_DB_PASSWORD }}" \
+            -e "storage_cs=${{ vars.STORAGE_CS }}" \
+            -e "timescaledb_telemetry=${{ vars.TIMESCALEDB_TELEMETRY }}" \
+            -e "validation_url=${{ vars.VALIDATION_URL }}" \
+            -e "storage_url=${{ vars.STORAGE_URL }}" \
+            -e "station_id=${{ vars.STATION_ID }}" \
+            -e "ingest_url=${{ vars.INGEST_URL }}" \
+            -e "rain_on_score=${{ vars.RAIN_ON_SCORE }}" \
+            -e "rain_off_score=${{ vars.RAIN_OFF_SCORE }}" \
+            -e "pressure_threshold_hpa=${{ vars.PRESSURE_THRESHOLD_HPA }}" \
+            -e "sensor_pressure_ms=${{ vars.SENSOR_PRESSURE_MS }}" \
+            -e "sensor_lidar_ms=${{ vars.SENSOR_LIDAR_MS }}" \
+            -e "sensor_lidar_seed=${{ vars.SENSOR_LIDAR_SEED }}" \
+            -e "sensor_humidity_ms=${{ vars.SENSOR_HUMIDITY_MS }}" \
+            -e "outbox_batch_max=${{ vars.OUTBOX_BATCH_MAX }}" \
+            -e "outbox_invisibility_sec=${{ vars.OUTBOX_INVISIBILITY_SEC }}" \
+            -e "h2c=${{ vars.DOTNET_HTTP2_UNENCRYPTED }}" \
+            -e "log_default=${{ vars.LOG_DEFAULT }}" \
+            -e "log_microsoft=${{ vars.LOG_MICROSOFT }}" \
+            -e "read_cs=${{ vars.READ_CS }}" \
+
+      - name: Deploy only ${{ env.SERVICE }}
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i /tmp/inventory.ini ansible/deploy_service_prod.yml \
+            -e "service=${SERVICE}" \
+            -e "github_owner=${{ steps.owner.outputs.lc }}"

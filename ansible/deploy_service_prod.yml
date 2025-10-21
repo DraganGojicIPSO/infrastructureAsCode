@@ -1,0 +1,24 @@
+---
+- hosts: all
+  become: true
+  vars:
+    service: "{{ service | default('query') }}"
+  tasks:
+    - name: Pull only selected service image
+      community.docker.docker_compose_v2:
+        project_src: /opt/meteo
+        files:
+          - docker-compose.prod.yml
+        services: [ "{{ service }}" ]
+        pull: always          # <- gültiger Wert (alternativ: missing/never/policy)
+        state: present        # erzeugt/aktualisiert das Service, aber ohne Restart
+
+    - name: Restart only selected service
+      community.docker.docker_compose_v2:
+        project_src: /opt/meteo
+        files:
+          - docker-compose.prod.yml
+        services: [ "{{ service }}" ]
+        state: restarted      # nur diesen Dienst neu starten
+        recreate: auto        # optional: nur wenn nötig neu erstellen
+        remove_orphans: true  # optional: aufräumen
