@@ -208,6 +208,7 @@ jobs:
             -e "log_microsoft=${{ vars.LOG_MICROSOFT }}" \
             -e "read_cs=${{ vars.READ_CS }}" \
             -e "dns_label=meteo-staging" \
+            -e "refresh_interval=${{ vars.REFRESH_INTERVAL }}" \
 
       - name: Deploy only ${{ env.SERVICE }}
         env:
