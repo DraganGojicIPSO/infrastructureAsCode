@@ -1,0 +1,2 @@
+azure_data_disk_lun: 0       # Azure Data Disk LUN
+ssd_mountpoint: /mnt/ssd     # Mountpoint in der VM
