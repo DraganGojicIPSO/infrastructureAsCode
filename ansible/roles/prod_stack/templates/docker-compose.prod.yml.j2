@@ -12,6 +12,12 @@ services:
       device_read_iops:
         - path: /dev/sda
           rate: 800          # optional
+      device_write_bps:                  # ← NEU
+        - path: /dev/sda
+          rate: "10mb"                   # z. B. 10 MB/s
+      device_write_iops:                 # ← NEU
+        - path: /dev/sda
+          rate: 600
     volumes:
       - read_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,6 +40,12 @@ services:
       device_read_iops:
         - path: /dev/sda
           rate: 800          # optional
+      device_write_bps:                  # ← NEU
+        - path: /dev/sda
+          rate: "10mb"                   # z. B. 10 MB/s
+      device_write_iops:                 # ← NEU
+        - path: /dev/sda
+          rate: 600
     volumes:
       - storage_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -96,6 +108,12 @@ services:
       device_read_iops:
         - path: /dev/sda
           rate: 800          # optional
+      device_write_bps:                  # ← NEU
+        - path: /dev/sda
+          rate: "10mb"                   # z. B. 10 MB/s
+      device_write_iops:                 # ← NEU
+        - path: /dev/sda
+          rate: 600
     volumes:
       - /opt/meteo/caddy:/etc/caddy:ro
       - caddy_data:/data          # Cert-Storage
@@ -113,6 +131,12 @@ services:
       device_read_iops:
         - path: /dev/sda
           rate: 800          # optional
+      device_write_bps:                  # ← NEU
+        - path: /dev/sda
+          rate: "10mb"                   # z. B. 10 MB/s
+      device_write_iops:                 # ← NEU
+        - path: /dev/sda
+          rate: 600
     volumes:
       - station_data:/data
     restart: unless-stopped
