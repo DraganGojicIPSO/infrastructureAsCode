@@ -5,13 +5,20 @@ services:
       POSTGRES_DB: "read"
       POSTGRES_USER: "${DB_USER}"
       POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    blkio_config:
+      device_read_bps:
+        - path: /dev/sda     # Root-Disk deines Hosts
+          rate: "20mb"       # z.B. 20 MB/s (anpassen)
+      device_read_iops:
+        - path: /dev/sda
+          rate: 800          # optional
     volumes:
       - read_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d read"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 60s
+      timeout: 10s
+      retries: 2
 
   storage-db:
     image: timescale/timescaledb:latest-pg15
@@ -20,13 +27,20 @@ services:
       POSTGRES_USER: "${STORAGE_DB_USER}"
       POSTGRES_PASSWORD: "${STORAGE_DB_PASSWORD}"
       TIMESCALEDB_TELEMETRY: "${TIMESCALEDB_TELEMETRY}"
+    blkio_config:
+      device_read_bps:
+        - path: /dev/sda     # Root-Disk deines Hosts
+          rate: "20mb"       # z.B. 20 MB/s (anpassen)
+      device_read_iops:
+        - path: /dev/sda
+          rate: 800          # optional
     volumes:
       - storage_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${STORAGE_DB_USER} -d ${STORAGE_DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 60s
+      timeout: 10s
+      retries: 2
 
   ingest:
     image: ghcr.io/{{ github_owner | lower }}/meteo-ingest:staging
@@ -75,6 +89,13 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    blkio_config:
+      device_read_bps:
+        - path: /dev/sda     # Root-Disk deines Hosts
+          rate: "20mb"       # z.B. 20 MB/s (anpassen)
+      device_read_iops:
+        - path: /dev/sda
+          rate: 800          # optional
     volumes:
       - /opt/meteo/caddy:/etc/caddy:ro
       - caddy_data:/data
@@ -85,6 +106,15 @@ services:
     image: ghcr.io/{{ github_owner | lower }}/meteo-station:staging
     env_file: [ ".env.staging" ]
     depends_on: [ ingest ]
+    blkio_config:
+      device_read_bps:
+        - path: /dev/sda     # Root-Disk deines Hosts
+          rate: "10mb"       # Startwert, z.B. 10 MB/s
+      device_read_iops:
+        - path: /dev/sda
+          rate: 500          # optional: IOPS-Limit für viele kleine Reads
+    tmpfs:
+      - /tmp                 # weniger Disk-Spill
     volumes:
       - station_data:/data
     restart: unless-stopped
