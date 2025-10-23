@@ -90,37 +90,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  read_db_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: "{{ volume_root }}/read-db"
-
-  storage_db_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: "{{ volume_root }}/storage-db"
-
-  station_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: "{{ volume_root }}/station"
-
-  caddy_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: "{{ volume_root }}/caddy/data"
-
-  caddy_config:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: "{{ volume_root }}/caddy/config"
+  read_db_data: {}
+  storage_db_data: {}
+  station_data: {}
+  caddy_data: {}
+  caddy_config: {}
