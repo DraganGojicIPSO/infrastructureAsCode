@@ -1,0 +1,10 @@
+- name: systemd-daemon-reload
+  listen: systemd-daemon-reload
+  systemd:
+    daemon_reload: true
+
+- name: restart journald
+  listen: restart journald
+  systemd:
+    name: systemd-journald
+    state: restarted

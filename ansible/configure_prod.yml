@@ -2,5 +2,5 @@
 - hosts: all
   become: true
   roles:
-    - prod_stack
     - common
+    - staging_stack

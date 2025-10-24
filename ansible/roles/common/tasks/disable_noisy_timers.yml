@@ -67,14 +67,6 @@
     line: 'Storage=volatile'
   notify: restart journald
 
-# Handler
-- name: systemd-daemon-reload
-  listen: systemd-daemon-reload
-  systemd:
-    daemon_reload: true
-
-- name: restart journald
-  listen: restart journald
-  systemd:
-    name: systemd-journald
-    state: restarted
+# nach dem großen Block einmal systemd reload triggern
+- name: Trigger systemd daemon-reload
+  meta: flush_handlers

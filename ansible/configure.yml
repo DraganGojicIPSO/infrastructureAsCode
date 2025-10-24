@@ -2,5 +2,6 @@
 - hosts: all
   become: true
   roles:
-    - staging_stack
     - common
+    - staging_stack
+
