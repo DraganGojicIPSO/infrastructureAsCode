@@ -3,3 +3,4 @@
   become: true
   roles:
     - prod_stack
+    - common
