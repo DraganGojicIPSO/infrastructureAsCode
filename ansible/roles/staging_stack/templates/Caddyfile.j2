@@ -1,23 +1,24 @@
 {
-   servers {
-    read_timeout 15s
-    write_timeout 15s
-    idle_timeout 30s
-    max_header_size 8kb
-   }
+  servers {
+    timeouts {
+      read_header 15s
+      read_body   15s
+      write       15s
+      idle        30s
+    }
+    max_header_size 8192   # oder 8KiB
+  }
 }
 
-{{ domain }}
-{
-    request_body {
-     max_size 5MB
-    }
+{{ domain }} {
+  request_body {
+    max_size 5MB
+  }
 
-    log {
-        output discard
-    }
-    
-    reverse_proxy http://query:8080
+  log {
+    output discard
+  }
 
-    tls dragan.gojic@student.ipso.ch
+  reverse_proxy http://query:8080
+  tls dragan.gojic@student.ipso.ch
 }
